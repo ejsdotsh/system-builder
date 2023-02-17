@@ -30,6 +30,7 @@ elif cat /proc/cpuinfo | grep "vendor" | grep "AuthenticAMD" > /dev/null; then
 fi
 
 # GPU vendor
+#### if lspci | grep -E "VGA|3D" | grep -E "Intel|NVIDIA" > /dev/null; then
 if lspci | grep "VGA" | grep "Intel" > /dev/null; then
     export GPU_PACKAGES="vulkan-intel intel-media-driver intel-gpu-tools"
     export MKINITCPIO_MODULES=" i915"
@@ -52,6 +53,9 @@ fi
 wipefs -af /dev/nvme0n1
 sgdisk --zap-all --clear /dev/nvme0n1
 partprobe /dev/nvme0n1
+
+#### TODO
+# add test for "kernel is still using the old partition table"
 
 # Partition disk and re-read partition table
 sgdisk -n 0:0:+512MiB -t 0:ef00 -c 0:boot /dev/nvme0n1
@@ -78,6 +82,7 @@ btrfs subvolume create /mnt/@home
 btrfs subvolume create /mnt/@snapshots
 btrfs subvolume create /mnt/@cache
 btrfs subvolume create /mnt/@docker
+btrfs subvolume create /mnt/@libvirt
 btrfs subvolume create /mnt/@log
 btrfs subvolume create /mnt/@tmp
 
@@ -85,15 +90,15 @@ btrfs subvolume create /mnt/@tmp
 umount /mnt
 
 export SV_OPTS="rw,noatime,compress-force=zstd:1,space_cache=v2"
-
 mount -o ${SV_OPTS},subvol=@ /dev/mapper/cryptdev /mnt
 
-mkdir -p /mnt/{home,.snapshots,var/cache,var/lib/docker,var/log,var/tmp}
+mkdir -p /mnt/{home,.snapshots,var/cache,var/lib/docker,var/lib/libvirt,var/log,var/tmp}
 
 mount -o ${SV_OPTS},subvol=@home /dev/mapper/cryptdev /mnt/home
 mount -o ${SV_OPTS},subvol=@snapshots /dev/mapper/cryptdev /mnt/.snapshots
 mount -o ${SV_OPTS},subvol=@cache /dev/mapper/cryptdev /mnt/var/cache
 mount -o ${SV_OPTS},subvol=@docker /dev/mapper/cryptdev /mnt/var/lib/docker
+mount -o ${SV_OPTS},subvol=@libvirt /dev/mapper/cryptdev /mnt/var/lib/libvirt
 mount -o ${SV_OPTS},subvol=@log /dev/mapper/cryptdev /mnt/var/log
 mount -o ${SV_OPTS},subvol=@tmp /dev/mapper/cryptdev /mnt/var/tmp
 
@@ -110,21 +115,21 @@ mount --mkdir /dev/nvme0n1p1 /mnt/boot
 ################################################
 
 # Import mirrorlist
-curl https://raw.githubusercontent.com/ejsdotsh/system-builder/archlinux/mirrorlist -o /etc/pacman.d/mirrorlist
+curl https://raw.githubusercontent.com/ejsdotsh/system-builder/dev/archlinux/mirrorlist -o /etc/pacman.d/mirrorlist
 
 # Synchronize package databases
 pacman -Syy
 
 # Install system
-pacstrap /mnt base base-devel linux linux-firmware btrfs-progs ${CPU_MICROCODE}
+pacstrap -K /mnt base base-devel linux linux-firmware linux-firmware-qlogic btrfs-progs ${CPU_MICROCODE}
 
 # Generate filesystem tab
 genfstab -U /mnt >> /mnt/etc/fstab
 
 # Configure system
-#### curl https://raw.githubusercontent.com/ejsdotsh/system-builder/archlinux/main/setup.sh -o setup.sh
-#### cp setup.sh /mnt/setup.sh
-#### chmod +x /mnt/setup.sh
-#### arch-chroot /mnt /bin/bash /setup.sh
-#### umount -R /mnt
+curl https://raw.githubusercontent.com/ejsdotsh/system-builder/dev/archlinux/arch_setup -O
+cp arch_setup /mnt/arch_setup
+chmod +x /mnt/arch_setup
+arch-chroot /mnt /bin/bash /arch_setup
+umount -R /mnt
 
